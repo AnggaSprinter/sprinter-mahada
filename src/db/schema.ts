@@ -53,6 +53,7 @@ export const tasks = pgTable('tasks', {
   waktuUpdate: text('waktu_update').notNull(),
   penerima: text('penerima').default(''),
   catatan: text('catatan').default(''),
+  fotoPenerima: text('foto_penerima').default(''),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

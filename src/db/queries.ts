@@ -52,6 +52,7 @@ export async function getAllData() {
             WaktuUpdate: t.waktu_update,
             Penerima: t.penerima || '',
             Catatan: t.catatan || '',
+            FotoPenerima: t.foto_penerima || '',
           })),
           vendors: (vendorsRes.data || []).map((v: any) => ({
             ID: v.id,
@@ -117,6 +118,7 @@ export async function getAllData() {
         WaktuUpdate: t.waktuUpdate,
         Penerima: t.penerima || '',
         Catatan: t.catatan || '',
+        FotoPenerima: t.fotoPenerima || '',
       })),
       vendors: allVendors.map((v) => ({
         ID: v.id,
@@ -182,6 +184,7 @@ export async function upsertTask(taskData: {
   WaktuUpdate?: string;
   Penerima?: string;
   Catatan?: string;
+  FotoPenerima?: string;
 }) {
   const formatted = {
     id: taskData.ID,
@@ -200,6 +203,7 @@ export async function upsertTask(taskData: {
     waktuUpdate: taskData.WaktuUpdate || new Date().toISOString().replace('T', ' ').substring(0, 19),
     penerima: taskData.Penerima || '',
     catatan: taskData.Catatan || '',
+    fotoPenerima: taskData.FotoPenerima || '',
   };
 
   if (isSupabaseConfigured) {
@@ -221,6 +225,7 @@ export async function upsertTask(taskData: {
         waktu_update: formatted.waktuUpdate,
         penerima: formatted.penerima,
         catatan: formatted.catatan,
+        foto_penerima: formatted.fotoPenerima,
       }).select().single();
 
       if (!error && data) {

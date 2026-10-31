@@ -229,6 +229,15 @@ export function SprinterApp() {
   const [modalKetBiaya, setModalKetBiaya] = useState<string>('');
   const [modalPenerima, setModalPenerima] = useState<string>('');
   const [modalCatatan, setModalCatatan] = useState<string>('');
+  const [modalFotoPenerima, setModalFotoPenerima] = useState<string>('');
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const editNativeCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   const [vendorModalData, setVendorModalData] = useState<{
     id?: string;
@@ -452,7 +461,7 @@ export function SprinterApp() {
         audio.volume = 0.01;
         audioKeepAliveRef.current = audio;
       }
-      audioKeepAliveRef.current.play().catch(() => {});
+      audioKeepAliveRef.current.play().catch(() => { });
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: `GPS Live: ${mySprinterIdentity}`,
@@ -462,12 +471,12 @@ export function SprinterApp() {
         navigator.mediaSession.playbackState = 'playing';
         try {
           navigator.mediaSession.setActionHandler('play', () => {
-            audioKeepAliveRef.current?.play().catch(() => {});
+            audioKeepAliveRef.current?.play().catch(() => { });
           });
-          navigator.mediaSession.setActionHandler('pause', () => {});
-        } catch (e) {}
+          navigator.mediaSession.setActionHandler('pause', () => { });
+        } catch (e) { }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 3. Main Geolocation Watch — high accuracy, low maximumAge for best real-time position
     const watchId = navigator.geolocation.watchPosition(
@@ -532,7 +541,7 @@ export function SprinterApp() {
             setCurrentGpsCoords(coords);
             sendGpsUpdate(coords);
           },
-          () => {},
+          () => { },
           { enableHighAccuracy: true, timeout: 6500, maximumAge: 0 }
         );
       };
@@ -555,7 +564,7 @@ export function SprinterApp() {
           setCurrentGpsCoords(coords);
           sendGpsUpdate(coords);
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }, 10000);
@@ -575,7 +584,7 @@ export function SprinterApp() {
           setCurrentGpsCoords(coords);
           sendGpsUpdate(coords);
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     };
@@ -593,11 +602,11 @@ export function SprinterApp() {
         try {
           bgWorkerRef.current.postMessage('stop');
           bgWorkerRef.current.terminate();
-        } catch (e) {}
+        } catch (e) { }
         bgWorkerRef.current = null;
       }
       if (wakeLockSentinelRef.current) {
-        wakeLockSentinelRef.current.release().catch(() => {});
+        wakeLockSentinelRef.current.release().catch(() => { });
         wakeLockSentinelRef.current = null;
       }
     };
@@ -619,7 +628,7 @@ export function SprinterApp() {
         try {
           bgWorkerRef.current.postMessage('stop');
           bgWorkerRef.current.terminate();
-        } catch (e) {}
+        } catch (e) { }
         bgWorkerRef.current = null;
       }
       if (audioKeepAliveRef.current) {
@@ -630,7 +639,7 @@ export function SprinterApp() {
         navigator.mediaSession.playbackState = 'none';
       }
       if (wakeLockSentinelRef.current) {
-        wakeLockSentinelRef.current.release().catch(() => {});
+        wakeLockSentinelRef.current.release().catch(() => { });
         wakeLockSentinelRef.current = null;
       }
 
@@ -674,9 +683,9 @@ export function SprinterApp() {
             .then((sentinel: any) => {
               wakeLockSentinelRef.current = sentinel;
             })
-            .catch(() => {});
+            .catch(() => { });
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 2. Start silent keep-alive immediately in user click event
       try {
@@ -686,7 +695,7 @@ export function SprinterApp() {
           audio.volume = 0.01;
           audioKeepAliveRef.current = audio;
         }
-        audioKeepAliveRef.current.play().catch(() => {});
+        audioKeepAliveRef.current.play().catch(() => { });
         if ('mediaSession' in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: `GPS Live: ${mySprinterIdentity}`,
@@ -696,10 +705,10 @@ export function SprinterApp() {
           navigator.mediaSession.playbackState = 'playing';
           try {
             navigator.mediaSession.setActionHandler('play', () => {
-              audioKeepAliveRef.current?.play().catch(() => {});
+              audioKeepAliveRef.current?.play().catch(() => { });
             });
-            navigator.mediaSession.setActionHandler('pause', () => {});
-          } catch (e) {}
+            navigator.mediaSession.setActionHandler('pause', () => { });
+          } catch (e) { }
         }
       } catch (e) {
         // ignore
@@ -929,6 +938,146 @@ export function SprinterApp() {
     }
   };
 
+  // Camera & Image Handlers
+  const compressImage = async (fileOrDataUrl: File | string, maxWidth = 1024, quality = 0.75): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(img.src);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = (err) => reject(err);
+      if (typeof fileOrDataUrl === 'string') {
+        img.src = fileOrDataUrl;
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          img.src = e.target?.result as string;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(fileOrDataUrl);
+      }
+    });
+  };
+
+  const stopCameraStream = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+    setIsCameraActive(false);
+  };
+
+  const startCamera = async (facing: 'environment' | 'user' = 'environment') => {
+    stopCameraStream();
+    setCameraFacingMode(facing);
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Kamera tidak didukung langsung oleh browser.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+      cameraStreamRef.current = stream;
+      setIsCameraActive(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 50);
+    } catch (err: any) {
+      console.warn('Gagal membuka kamera langsung:', err);
+      showToast('Membuka kamera bawaan perangkat...');
+      setIsCameraActive(false);
+      setTimeout(() => {
+        nativeCameraInputRef.current?.click();
+      }, 100);
+    }
+  };
+
+  const handleCaptureFromVideo = async () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const raw = canvas.toDataURL('image/jpeg', 0.85);
+      try {
+        const compressed = await compressImage(raw, 1024, 0.75);
+        setModalFotoPenerima(compressed);
+        showToast('Foto penerima berhasil diambil!');
+      } catch {
+        setModalFotoPenerima(raw);
+        showToast('Foto penerima berhasil diambil!');
+      }
+    }
+    stopCameraStream();
+  };
+
+  const handleFlipCamera = () => {
+    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    startCamera(nextFacing);
+  };
+
+  const handleNativeFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEdit = false) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      const compressed = await compressImage(file, 1024, 0.75);
+      if (isEdit) {
+        setEditModalTask((prev) => (prev ? { ...prev, FotoPenerima: compressed } : null));
+      } else {
+        setModalFotoPenerima(compressed);
+      }
+      showToast('Foto berhasil dimuat!');
+    } catch (err) {
+      console.error('Compress error:', err);
+      showToast('Gagal memproses foto.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  useEffect(() => {
+    if (isCameraActive && cameraStreamRef.current && videoRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraActive, cameraFacingMode]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
   // Open Status modal
   const handleOpenStatusModal = (task: Task) => {
     setStatusModalTask(task);
@@ -937,6 +1086,7 @@ export function SprinterApp() {
     setModalKetBiaya(task.KeteranganBiaya || '');
     setModalPenerima(task.Penerima || '');
     setModalCatatan(task.Catatan || '');
+    setModalFotoPenerima(task.FotoPenerima || '');
   };
 
   const handleSaveStatusModal = async () => {
@@ -953,6 +1103,7 @@ export function SprinterApp() {
       KeteranganBiaya: modalKetBiaya.trim(),
       Penerima: modalPenerima.trim(),
       Catatan: modalCatatan.trim(),
+      FotoPenerima: modalFotoPenerima.trim(),
       WaktuUpdate: getJakartaTimeString(),
     };
 
@@ -1274,11 +1425,10 @@ export function SprinterApp() {
     return (
       <div
         id="rekap-printable-area"
-        className={`bg-white text-slate-900 font-sans print-document-container ${
-          isModalPreview
-            ? 'w-full max-w-[820px] mx-auto p-6 sm:p-8 rounded-xl shadow-2xl border border-slate-200 text-xs text-left'
-            : 'print-only-document p-0 text-left'
-        }`}
+        className={`bg-white text-slate-900 font-sans print-document-container ${isModalPreview
+          ? 'w-full max-w-[820px] mx-auto p-6 sm:p-8 rounded-xl shadow-2xl border border-slate-200 text-xs text-left'
+          : 'print-only-document p-0 text-left'
+          }`}
       >
         {/* KOP / HEADER LAPORAN RESMI */}
         <div className="border-b-2 border-slate-900 pb-3 mb-4">
@@ -1349,26 +1499,23 @@ export function SprinterApp() {
           </div>
 
           <div
-            className={`border rounded-lg p-2.5 ${
-              sisaUang >= 0
-                ? 'border-emerald-300 bg-emerald-50/50 text-emerald-950'
-                : 'border-rose-300 bg-rose-50/50 text-rose-950'
-            }`}
+            className={`border rounded-lg p-2.5 ${sisaUang >= 0
+              ? 'border-emerald-300 bg-emerald-50/50 text-emerald-950'
+              : 'border-rose-300 bg-rose-50/50 text-rose-950'
+              }`}
           >
             <div className="text-[10px] font-bold uppercase tracking-wider opacity-85 mb-0.5 flex justify-between items-center">
               <span>3. Sisa Saldo Kas</span>
               <span
-                className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
-                  sisaUang >= 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
-                }`}
+                className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${sisaUang >= 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+                  }`}
               >
                 {sisaUang >= 0 ? 'Surplus / Sisa' : 'Defisit'}
               </span>
             </div>
             <div
-              className={`text-sm sm:text-base font-mono font-black ${
-                sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
-              }`}
+              className={`text-sm sm:text-base font-mono font-black ${sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                }`}
             >
               {formatRupiah(sisaUang)}
             </div>
@@ -1449,9 +1596,8 @@ export function SprinterApp() {
                   Sisa Saldo Kas (Kembalian) :
                 </td>
                 <td
-                  className={`border border-slate-300 p-1.5 text-right font-mono font-black text-[11px] whitespace-nowrap ${
-                    sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
+                  className={`border border-slate-300 p-1.5 text-right font-mono font-black text-[11px] whitespace-nowrap ${sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
                 >
                   {formatRupiah(sisaUang)}
                 </td>
@@ -1518,7 +1664,7 @@ export function SprinterApp() {
 
       {/* MAIN CONTAINER */}
       <div className="w-full md:max-w-2xl lg:max-w-3xl mx-auto bg-slate-50 dark:bg-[#0f172a] min-h-screen relative pb-28 shadow-2xl overflow-x-hidden border-x border-slate-200 dark:border-slate-800 z-10 hide-on-print">
-        
+
         {/* HEADER */}
         <header className="bg-slate-900 text-white px-4 md:px-6 py-3.5 sticky top-0 z-30 border-b border-slate-800 shadow-sm backdrop-blur-md bg-slate-900/95">
           <div className="flex justify-between items-center gap-3">
@@ -1551,11 +1697,10 @@ export function SprinterApp() {
                 type="button"
                 onClick={handleInstallClick}
                 title={isAppInstalled ? 'Aplikasi Terpasang di HP' : 'Install Aplikasi di HP (PWA)'}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer active:scale-95 shadow-xs ${
-                  isAppInstalled
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-teal-500 hover:bg-teal-400 text-slate-900 border-teal-400 font-extrabold'
-                }`}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer active:scale-95 shadow-xs ${isAppInstalled
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-teal-500 hover:bg-teal-400 text-slate-900 border-teal-400 font-extrabold'
+                  }`}
               >
                 <i className={`bi ${isAppInstalled ? 'bi-check-circle-fill' : 'bi-phone-vibrate'} text-sm`}></i>
                 <span className="hidden sm:inline">{isAppInstalled ? 'Terpasang' : 'Install di HP'}</span>
@@ -1583,11 +1728,10 @@ export function SprinterApp() {
                 type="button"
                 onClick={() => setActiveTab('setting')}
                 title="Pengaturan"
-                className={`w-9 h-9 flex items-center justify-center rounded-xl transition border cursor-pointer active:scale-95 ${
-                  activeTab === 'setting'
-                    ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-500/30'
-                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
-                }`}
+                className={`w-9 h-9 flex items-center justify-center rounded-xl transition border cursor-pointer active:scale-95 ${activeTab === 'setting'
+                  ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-500/30'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                  }`}
               >
                 <i className="bi bi-gear-fill text-sm"></i>
               </button>
@@ -1709,19 +1853,17 @@ export function SprinterApp() {
                       key={st}
                       type="button"
                       onClick={() => setStatusFilter(st)}
-                      className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5 ${
-                        isActive
-                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
+                      className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-1.5 ${isActive
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
                       <span>{label}</span>
                       <span
-                        className={`text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded-md ${
-                          isActive
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold'
-                            : 'bg-black/5 dark:bg-white/10 text-slate-500 dark:text-slate-400'
-                        }`}
+                        className={`text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded-md ${isActive
+                          ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold'
+                          : 'bg-black/5 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+                          }`}
                       >
                         {count}
                       </span>
@@ -1806,15 +1948,14 @@ export function SprinterApp() {
 
                         {/* Status Badge */}
                         <span
-                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
-                            t.Status === 'Dalam Perjalanan'
-                              ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60'
-                              : t.Status === 'Selesai'
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border whitespace-nowrap ${t.Status === 'Dalam Perjalanan'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60'
+                            : t.Status === 'Selesai'
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60'
                               : t.Status === 'Gagal'
-                              ? 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60'
-                              : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                          }`}
+                                ? 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60'
+                                : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                            }`}
                         >
                           {t.Status === 'Dalam Perjalanan' ? 'Diproses' : t.Status === 'Gagal' ? 'Batal' : t.Status}
                         </span>
@@ -1831,11 +1972,10 @@ export function SprinterApp() {
                               href={resJudul.url}
                               target="_blank"
                               rel="noreferrer"
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition hover:opacity-90 ${
-                                resJudul.vendorMatch.LinkMaps
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                              }`}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition hover:opacity-90 ${resJudul.vendorMatch.LinkMaps
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                }`}
                               title={resJudul.vendorMatch.LinkMaps ? `Buka Google Maps ${resJudul.vendorMatch.Nama}` : 'Cari di Google Maps'}
                             >
                               <i className="bi bi-geo-alt-fill text-rose-500"></i>
@@ -1935,6 +2075,35 @@ export function SprinterApp() {
                               Penerima: <strong className="text-slate-700 dark:text-slate-300">{t.Penerima}</strong>
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {/* Bukti Foto Penerima */}
+                      {t.FotoPenerima && (
+                        <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200/90 dark:border-slate-700/80 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <img
+                              src={t.FotoPenerima}
+                              alt="Bukti Penerima"
+                              onClick={() => setPreviewImage(t.FotoPenerima || null)}
+                              className="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs hover:scale-105 transition-transform shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                <i className="bi bi-camera-fill text-teal-600 dark:text-teal-400"></i> Bukti Foto Penerima
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                {t.Penerima ? `Diterima: ${t.Penerima}` : 'Foto telah didokumentasikan'}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImage(t.FotoPenerima || null)}
+                            className="text-xs px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold rounded-lg cursor-pointer transition shrink-0 flex items-center gap-1"
+                          >
+                            <i className="bi bi-zoom-in"></i> Lihat
+                          </button>
                         </div>
                       )}
 
@@ -2138,11 +2307,10 @@ export function SprinterApp() {
                             <button
                               type="button"
                               onClick={() => setSelectedSprinterOnMap(undefined)}
-                              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
-                                !selectedSprinterOnMap
-                                  ? 'bg-teal-600 text-white border-teal-600'
-                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
-                              }`}
+                              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${!selectedSprinterOnMap
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                                }`}
                             >
                               Semua ({activeSprinters.length})
                             </button>
@@ -2157,16 +2325,14 @@ export function SprinterApp() {
                                       selectedSprinterOnMap === s.karyawanNama ? undefined : s.karyawanNama
                                     )
                                   }
-                                  className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
-                                    selectedSprinterOnMap === s.karyawanNama
-                                      ? 'bg-teal-600 text-white border-teal-600'
-                                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
-                                  }`}
+                                  className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${selectedSprinterOnMap === s.karyawanNama
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                                    }`}
                                 >
                                   <span
-                                    className={`w-1.5 h-1.5 rounded-full ${
-                                      isLive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                                    }`}
+                                    className={`w-1.5 h-1.5 rounded-full ${isLive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                                      }`}
                                   ></span>
                                   <span>{s.karyawanNama}</span>
                                   <span className="text-[10px] opacity-75">
@@ -2193,20 +2359,18 @@ export function SprinterApp() {
                           <div
                             key={s.id}
                             onClick={() => setSelectedSprinterOnMap(s.karyawanNama)}
-                            className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                              selectedSprinterOnMap === s.karyawanNama
-                                ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-300 dark:border-teal-700 shadow-sm'
-                                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-teal-400'
-                            }`}
+                            className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${selectedSprinterOnMap === s.karyawanNama
+                              ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-300 dark:border-teal-700 shadow-sm'
+                              : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-teal-400'
+                              }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2.5">
                                 <div
-                                  className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
-                                    isLive
-                                      ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'
-                                  }`}
+                                  className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${isLive
+                                    ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'
+                                    }`}
                                 >
                                   <i className="bi bi-person-walking"></i>
                                 </div>
@@ -2216,11 +2380,10 @@ export function SprinterApp() {
                                       {s.karyawanNama}
                                     </span>
                                     <span
-                                      className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                                        isLive
-                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
-                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
-                                      }`}
+                                      className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${isLive
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
+                                        }`}
                                     >
                                       {isLive ? 'Live Bergerak' : 'Standby / Posisi Terakhir'}
                                     </span>
@@ -2245,9 +2408,8 @@ export function SprinterApp() {
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <span
-                                  className={`w-2 h-2 rounded-full ${
-                                    isLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                                  }`}
+                                  className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                                    }`}
                                 ></span>
                                 <a
                                   href={`https://www.google.com/maps?q=${s.latitude},${s.longitude}`}
@@ -2515,22 +2677,20 @@ export function SprinterApp() {
                       <button
                         type="button"
                         onClick={() => setAddPrioritas('Standar')}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                          addPrioritas === 'Standar'
-                            ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${addPrioritas === 'Standar'
+                          ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          }`}
                       >
                         <i className="bi bi-clock"></i> Standar
                       </button>
                       <button
                         type="button"
                         onClick={() => setAddPrioritas('Urgent')}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                          addPrioritas === 'Urgent'
-                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                        }`}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-1.5 ${addPrioritas === 'Urgent'
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                          }`}
                       >
                         <i className="bi bi-fire text-rose-500"></i> Urgent
                       </button>
@@ -2733,22 +2893,20 @@ export function SprinterApp() {
                       <button
                         type="button"
                         onClick={() => setReportDate(getTodayDateString())}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
-                          reportDate === getTodayDateString()
-                            ? 'bg-teal-500 text-white font-extrabold'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-                        }`}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${reportDate === getTodayDateString()
+                          ? 'bg-teal-500 text-white font-extrabold'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}
                       >
                         Hari Ini
                       </button>
                       <button
                         type="button"
                         onClick={() => setReportDate(getYesterdayDateString())}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
-                          reportDate === getYesterdayDateString()
-                            ? 'bg-teal-500 text-white font-extrabold'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-                        }`}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${reportDate === getYesterdayDateString()
+                          ? 'bg-teal-500 text-white font-extrabold'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}
                       >
                         Kemarin
                       </button>
@@ -2890,38 +3048,34 @@ export function SprinterApp() {
               </div>
 
               {/* Sisa Saldo Kas */}
-              <div className={`p-4 rounded-2xl shadow-sm border flex items-center justify-between ${
-                sisaUang >= 0
-                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
-                  : 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40'
-              }`}>
+              <div className={`p-4 rounded-2xl shadow-sm border flex items-center justify-between ${sisaUang >= 0
+                ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
+                : 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40'
+                }`}>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
                       Sisa Saldo Kas
                     </span>
-                    <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
-                      sisaUang >= 0
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
-                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
-                    }`}>
+                    <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${sisaUang >= 0
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                      : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
+                      }`}>
                       {sisaUang >= 0 ? 'Surplus' : 'Defisit'}
                     </span>
                   </div>
-                  <span className={`text-lg sm:text-xl font-mono font-black ${
-                    sisaUang >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                  }`}>
+                  <span className={`text-lg sm:text-xl font-mono font-black ${sisaUang >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                    }`}>
                     {formatRupiah(sisaUang)}
                   </span>
                   <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                     {sisaUang >= 0 ? 'Kembalian kas tersedia' : 'Pengeluaran melebihi kas'}
                   </span>
                 </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                  sisaUang >= 0
-                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300'
-                    : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300'
-                }`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${sisaUang >= 0
+                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300'
+                  : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300'
+                  }`}>
                   <i className="bi bi-wallet2"></i>
                 </div>
               </div>
@@ -3099,11 +3253,10 @@ export function SprinterApp() {
               <button
                 type="button"
                 onClick={() => setSettingTab('karyawan')}
-                className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                  settingTab === 'karyawan'
-                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${settingTab === 'karyawan'
+                  ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 <i className="bi bi-people-fill text-sm"></i>
                 <span>Kelola Karyawan</span>
@@ -3112,11 +3265,10 @@ export function SprinterApp() {
               <button
                 type="button"
                 onClick={() => setSettingTab('gps')}
-                className={`flex-1 min-w-[100px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                  settingTab === 'gps'
-                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`flex-1 min-w-[100px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${settingTab === 'gps'
+                  ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 <i className="bi bi-geo-alt-fill text-sm"></i>
                 <span>Pelacak GPS</span>
@@ -3125,11 +3277,10 @@ export function SprinterApp() {
               <button
                 type="button"
                 onClick={() => setSettingTab('kategori')}
-                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                  settingTab === 'kategori'
-                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${settingTab === 'kategori'
+                  ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 <i className="bi bi-tags-fill text-sm"></i>
                 <span>Kategori</span>
@@ -3138,11 +3289,10 @@ export function SprinterApp() {
               <button
                 type="button"
                 onClick={() => setSettingTab('informasi')}
-                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                  settingTab === 'informasi'
-                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${settingTab === 'informasi'
+                  ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
               >
                 <i className="bi bi-info-circle-fill text-sm"></i>
                 <span>Informasi</span>
@@ -3230,23 +3380,21 @@ export function SprinterApp() {
                     <i className="bi bi-geo-alt-fill text-teal-500"></i> Pelacak GPS Handphone Sprinter
                   </h3>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 ${
-                      isGpsBroadcasting
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                    }`}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 ${isGpsBroadcasting
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
                   >
                     <span
-                      className={`w-2 h-2 rounded-full ${
-                        isGpsBroadcasting ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
-                      }`}
+                      className={`w-2 h-2 rounded-full ${isGpsBroadcasting ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
+                        }`}
                     ></span>
                     {isGpsBroadcasting ? 'GPS Aktif (Broadcasting)' : 'GPS Nonaktif'}
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-                  Fitur ini membaca GPS langsung dari browser handphone sprinter dan menyinkronkannya ke cloud database. 
+                  Fitur ini membaca GPS langsung dari browser handphone sprinter dan menyinkronkannya ke cloud database.
                   Tidak memerlukan akun email pihak ketiga atau alat tracker berbayar.
                 </p>
 
@@ -3306,11 +3454,10 @@ export function SprinterApp() {
                   <button
                     type="button"
                     onClick={handleToggleGps}
-                    className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm cursor-pointer transition flex items-center justify-center gap-2 shadow-sm ${
-                      isGpsBroadcasting
-                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                        : 'bg-teal-600 hover:bg-teal-700 text-white'
-                    }`}
+                    className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm cursor-pointer transition flex items-center justify-center gap-2 shadow-sm ${isGpsBroadcasting
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-teal-600 hover:bg-teal-700 text-white'
+                      }`}
                   >
                     <i className={`bi ${isGpsBroadcasting ? 'bi-stop-circle-fill' : 'bi-broadcast-pin'} text-base`}></i>
                     <span>{isGpsBroadcasting ? 'Matikan Siaran GPS HP' : 'Mulai Siaran Live GPS HP'}</span>
@@ -3364,9 +3511,8 @@ export function SprinterApp() {
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <span
-                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                                  isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                                }`}
+                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                                  }`}
                               ></span>
                               <div className="truncate">
                                 <span className="font-bold text-slate-800 dark:text-slate-200">{sprinter.Nama}</span>
@@ -3374,8 +3520,8 @@ export function SprinterApp() {
                                   {isOnline && loc
                                     ? `Online • ${formatTimeAgo(loc.waktuUpdate)} (±${Math.round(loc.accuracy || 0)}m)`
                                     : loc
-                                    ? `Terakhir online ${formatTimeAgo(loc.waktuUpdate)}`
-                                    : 'Belum pernah aktif'}
+                                      ? `Terakhir online ${formatTimeAgo(loc.waktuUpdate)}`
+                                      : 'Belum pernah aktif'}
                                 </div>
                               </div>
                             </div>
@@ -3463,11 +3609,10 @@ export function SprinterApp() {
                       <i className="bi bi-phone-vibrate-fill text-teal-500"></i> Install Aplikasi di Handphone
                     </h3>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isAppInstalled
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                          : 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300'
-                      }`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isAppInstalled
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300'
+                        }`}
                     >
                       {isAppInstalled ? 'Sudah Terpasang' : 'Tersedia untuk HP'}
                     </span>
@@ -3504,11 +3649,10 @@ export function SprinterApp() {
                     <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                       <i className="bi bi-shield-lock-fill text-teal-500"></i> Autentikasi Supabase
                     </h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      isSupabaseConfigured
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                    }`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isSupabaseConfigured
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                      }`}>
                       {isSupabaseConfigured ? 'Supabase Terhubung' : 'Mode Offline / Dev'}
                     </span>
                   </div>
@@ -3548,29 +3692,26 @@ export function SprinterApp() {
                         <button
                           type="button"
                           onClick={() => { setAuthMode('signin'); setAuthMsg(null); }}
-                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
-                            authMode === 'signin' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
-                          }`}
+                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${authMode === 'signin' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
+                            }`}
                         >
                           Masuk
                         </button>
                         <button
                           type="button"
                           onClick={() => { setAuthMode('signup'); setAuthMsg(null); }}
-                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
-                            authMode === 'signup' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
-                          }`}
+                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${authMode === 'signup' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
+                            }`}
                         >
                           Daftar Baru
                         </button>
                       </div>
 
                       {authMsg && (
-                        <div className={`p-3 rounded-xl text-xs font-medium ${
-                          authMsg.error
-                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                        }`}>
+                        <div className={`p-3 rounded-xl text-xs font-medium ${authMsg.error
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                          : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          }`}>
                           {authMsg.text}
                         </div>
                       )}
@@ -3629,8 +3770,8 @@ export function SprinterApp() {
                         {isSubmittingAuth
                           ? 'Memproses...'
                           : authMode === 'signin'
-                          ? 'Masuk ke Akun'
-                          : 'Daftar Akun Baru'}
+                            ? 'Masuk ke Akun'
+                            : 'Daftar Akun Baru'}
                       </button>
 
                       <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
@@ -3683,9 +3824,8 @@ export function SprinterApp() {
         <button
           type="button"
           onClick={() => setActiveTab('home')}
-          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'home' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${activeTab === 'home' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <i className="bi bi-grid-fill text-lg"></i>
           <span className="text-[10px] tracking-wide">Tugas</span>
@@ -3694,9 +3834,8 @@ export function SprinterApp() {
         <button
           type="button"
           onClick={() => setActiveTab('radar')}
-          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'radar' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${activeTab === 'radar' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <i className="bi bi-broadcast-pin text-lg"></i>
           <span className="text-[10px] tracking-wide">Radar</span>
@@ -3707,11 +3846,10 @@ export function SprinterApp() {
           <button
             type="button"
             onClick={() => setActiveTab('add')}
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm cursor-pointer transition active:scale-95 ${
-              activeTab === 'add'
-                ? 'bg-teal-600 text-white ring-4 ring-teal-500/20 shadow-teal-500/30'
-                : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-teal-600'
-            }`}
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm cursor-pointer transition active:scale-95 ${activeTab === 'add'
+              ? 'bg-teal-600 text-white ring-4 ring-teal-500/20 shadow-teal-500/30'
+              : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-teal-600'
+              }`}
             title="Tambah Tugas Baru"
           >
             <i className="bi bi-plus-lg text-lg font-bold"></i>
@@ -3721,9 +3859,8 @@ export function SprinterApp() {
         <button
           type="button"
           onClick={() => setActiveTab('report')}
-          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'report' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${activeTab === 'report' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <i className="bi bi-wallet-fill text-lg"></i>
           <span className="text-[10px] tracking-wide">Rekap</span>
@@ -3732,9 +3869,8 @@ export function SprinterApp() {
         <button
           type="button"
           onClick={() => setActiveTab('vendor')}
-          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'vendor' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-          }`}
+          className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${activeTab === 'vendor' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
         >
           <i className="bi bi-shop-window text-lg"></i>
           <span className="text-[10px] tracking-wide">Vendor</span>
@@ -3785,11 +3921,10 @@ export function SprinterApp() {
                         href={mapRes.url}
                         target="_blank"
                         rel="noreferrer"
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold inline-flex items-center gap-1 ${
-                          mapRes.vendorMatch.LinkMaps
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold inline-flex items-center gap-1 ${mapRes.vendorMatch.LinkMaps
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                          : 'bg-slate-100 text-slate-600'
+                          }`}
                       >
                         <i className="bi bi-geo-alt-fill text-emerald-600"></i>
                         <span>Maps: {mapRes.vendorMatch.Nama}</span>
@@ -3839,9 +3974,8 @@ export function SprinterApp() {
                   key={s.key}
                   type="button"
                   onClick={() => setModalStatusChoice(s.key)}
-                  className={`py-3 px-2 border rounded-xl font-bold text-sm cursor-pointer transition ${s.color} ${
-                    modalStatusChoice === s.key ? 'ring-2 ring-teal-500 shadow-sm' : ''
-                  }`}
+                  className={`py-3 px-2 border rounded-xl font-bold text-sm cursor-pointer transition ${s.color} ${modalStatusChoice === s.key ? 'ring-2 ring-teal-500 shadow-sm' : ''
+                    }`}
                 >
                   {s.label}
                 </button>
@@ -3862,6 +3996,86 @@ export function SprinterApp() {
                     className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200"
                   />
                 </div>
+
+                {/* Foto Penerima khusus Selesai */}
+                {modalStatusChoice === 'Selesai' && (
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <i className="bi bi-camera-fill text-teal-600 dark:text-teal-400"></i>
+                        Foto Penerima / Bukti Serah Terima
+                      </span>
+                      {modalFotoPenerima && (
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                          <i className="bi bi-check-circle-fill"></i> Foto Siap
+                        </span>
+                      )}
+                    </label>
+
+                    {!modalFotoPenerima ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => startCamera('environment')}
+                          className="w-full py-3 px-4 bg-teal-600 hover:bg-teal-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                        >
+                          <i className="bi bi-camera-fill text-base"></i> Ambil Foto Penerima (Kamera Langsung)
+                        </button>
+                        <div className="flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => nativeCameraInputRef.current?.click()}
+                            className="text-xs text-slate-500 hover:text-teal-600 dark:text-slate-400 dark:hover:text-teal-400 flex items-center gap-1.5 font-medium py-1 px-2.5 rounded-lg cursor-pointer transition hover:bg-slate-200/60 dark:hover:bg-slate-700/60"
+                          >
+                            <i className="bi bi-phone"></i> Gunakan Kamera Bawaan HP / Galeri
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/80 rounded-xl space-y-2.5">
+                        <div className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-950 flex items-center justify-center max-h-48">
+                          <img
+                            src={modalFotoPenerima}
+                            alt="Bukti Penerima"
+                            className="w-full max-h-48 object-contain"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImage(modalFotoPenerima)}
+                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1 cursor-pointer"
+                          >
+                            <i className="bi bi-zoom-in text-base"></i> Perbesar Foto
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startCamera('environment')}
+                            className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                          >
+                            <i className="bi bi-arrow-repeat"></i> Foto Ulang
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setModalFotoPenerima('')}
+                            className="py-2 px-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                          >
+                            <i className="bi bi-trash"></i> Hapus
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <input
+                      ref={nativeCameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => handleNativeFileChange(e, false)}
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">
                     Catatan Bukti / Keterangan *
@@ -4002,6 +4216,83 @@ export function SprinterApp() {
                   value={editModalTask.Biaya || ''}
                   onChange={(e) => setEditModalTask({ ...editModalTask, Biaya: Number(e.target.value) || 0 })}
                   className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-mono font-bold text-teal-700 dark:text-teal-400 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">Penerima</label>
+                  <input
+                    type="text"
+                    value={editModalTask.Penerima || ''}
+                    onChange={(e) => setEditModalTask({ ...editModalTask, Penerima: e.target.value })}
+                    className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">Catatan</label>
+                  <input
+                    type="text"
+                    value={editModalTask.Catatan || ''}
+                    onChange={(e) => setEditModalTask({ ...editModalTask, Catatan: e.target.value })}
+                    className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1.5 text-slate-700 dark:text-slate-300">
+                  Foto Penerima / Bukti Serah Terima
+                </label>
+                {editModalTask.FotoPenerima ? (
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
+                    <div className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-950 flex items-center justify-center max-h-48">
+                      <img
+                        src={editModalTask.FotoPenerima}
+                        alt="Foto Penerima"
+                        className="w-full max-h-48 object-contain"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage(editModalTask.FotoPenerima || null)}
+                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1 cursor-pointer"
+                      >
+                        <i className="bi bi-zoom-in text-base"></i> Perbesar
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editNativeCameraInputRef.current?.click()}
+                        className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                      >
+                        <i className="bi bi-camera"></i> Ganti Foto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditModalTask({ ...editModalTask, FotoPenerima: '' })}
+                        className="py-2 px-3 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition"
+                      >
+                        <i className="bi bi-trash"></i> Hapus Foto
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => editNativeCameraInputRef.current?.click()}
+                    className="w-full py-2.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-teal-500 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  >
+                    <i className="bi bi-camera-fill text-teal-600 dark:text-teal-400"></i> Ambil / Unggah Foto Penerima
+                  </button>
+                )}
+                <input
+                  ref={editNativeCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => handleNativeFileChange(e, true)}
                 />
               </div>
             </div>
@@ -4265,6 +4556,134 @@ export function SprinterApp() {
           {/* Paper Canvas Container */}
           <div className="w-full max-w-[840px] overflow-x-auto pb-10 flex justify-center">
             {renderPrintableDocument(true)}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KAMERA LANGSUNG */}
+      {isCameraActive && (
+        <div className="fixed inset-0 bg-black z-[10000] flex flex-col justify-between items-center p-4 select-none">
+          {/* Top Bar */}
+          <div className="w-full max-w-md flex justify-between items-center text-white py-2 z-10">
+            <button
+              type="button"
+              onClick={stopCameraStream}
+              className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition"
+            >
+              <i className="bi bi-x-lg text-lg"></i>
+            </button>
+            <div className="text-center">
+              <p className="font-bold text-sm">Ambil Foto Penerima</p>
+              <p className="text-[11px] text-white/70">Arahkan kamera ke penerima / barang</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleFlipCamera}
+              className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition"
+              title="Putar Kamera"
+            >
+              <i className="bi bi-arrow-repeat text-lg"></i>
+            </button>
+          </div>
+
+          {/* Video Viewfinder */}
+          <div className="relative w-full max-w-md flex-1 my-2 rounded-2xl overflow-hidden bg-slate-900 flex items-center justify-center border border-white/20">
+            <video
+              ref={videoRef}
+              playsInline
+              autoPlay
+              muted
+              className="w-full h-full object-cover"
+            />
+            {/* Viewfinder frame overlay */}
+            <div className="absolute inset-8 border-2 border-white/40 rounded-xl pointer-events-none flex flex-col justify-between p-2">
+              <div className="flex justify-between">
+                <div className="w-4 h-4 border-t-2 border-l-2 border-teal-400"></div>
+                <div className="w-4 h-4 border-t-2 border-r-2 border-teal-400"></div>
+              </div>
+              <div className="flex justify-between">
+                <div className="w-4 h-4 border-b-2 border-l-2 border-teal-400"></div>
+                <div className="w-4 h-4 border-b-2 border-r-2 border-teal-400"></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Bar: Shutter */}
+          <div className="w-full max-w-md flex justify-around items-center py-4 z-10">
+            <button
+              type="button"
+              onClick={() => {
+                stopCameraStream();
+                nativeCameraInputRef.current?.click();
+              }}
+              className="text-white/80 hover:text-white text-xs flex flex-col items-center gap-1 cursor-pointer"
+            >
+              <i className="bi bi-phone text-xl"></i>
+              <span>Kamera HP</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCaptureFromVideo}
+              className="w-18 h-18 rounded-full border-4 border-white bg-teal-500 hover:bg-teal-400 active:scale-90 transition cursor-pointer flex items-center justify-center shadow-lg"
+              title="Ambil Foto"
+            >
+              <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center text-teal-600">
+                <i className="bi bi-camera-fill text-2xl"></i>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={stopCameraStream}
+              className="text-white/80 hover:text-white text-xs flex flex-col items-center gap-1 cursor-pointer"
+            >
+              <i className="bi bi-x-circle text-xl"></i>
+              <span>Batal</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIGHTBOX PREVIEW FOTO */}
+      {previewImage && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPreviewImage(null);
+          }}
+          className="fixed inset-0 bg-black/80 z-[10000] flex flex-col justify-center items-center p-4 backdrop-blur-md animate-fade-in"
+        >
+          <div className="relative max-w-2xl w-full flex flex-col items-center">
+            <div className="w-full flex justify-between items-center mb-3 text-white">
+              <span className="text-sm font-bold flex items-center gap-2">
+                <i className="bi bi-camera-fill text-teal-400"></i> Bukti Foto Penerima
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewImage}
+                  download="foto-penerima.jpg"
+                  className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition"
+                  title="Unduh Foto"
+                >
+                  <i className="bi bi-download"></i>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage(null)}
+                  className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition cursor-pointer"
+                  title="Tutup"
+                >
+                  <i className="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div className="bg-slate-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl max-h-[80vh] flex items-center justify-center">
+              <img
+                src={previewImage}
+                alt="Bukti Penerima"
+                className="max-w-full max-h-[78vh] object-contain rounded-xl"
+              />
+            </div>
           </div>
         </div>
       )}

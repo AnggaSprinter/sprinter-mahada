@@ -15,6 +15,7 @@ export interface Task {
   WaktuUpdate: string;
   Penerima: string;
   Catatan: string;
+  FotoPenerima?: string;
 }
 
 export interface Vendor {

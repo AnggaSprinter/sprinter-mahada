@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     waktu_update TEXT NOT NULL,
     penerima TEXT DEFAULT '',
     catatan TEXT DEFAULT '',
+    foto_penerima TEXT DEFAULT '',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -139,4 +140,12 @@ CREATE POLICY "Allow all for users" ON public.users FOR ALL USING (true) WITH CH
 
 DROP POLICY IF EXISTS "Allow all for sprinter_locations" ON public.sprinter_locations;
 CREATE POLICY "Allow all for sprinter_locations" ON public.sprinter_locations FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- 10. MIGRATION TAMBAHAN: KOLOM FOTO PENERIMA
+-- Jalankan query di bawah ini jika tabel tasks sudah ada sebelumnya:
+-- ============================================================
+ALTER TABLE public.tasks 
+ADD COLUMN IF NOT EXISTS foto_penerima TEXT DEFAULT '';
+
 
