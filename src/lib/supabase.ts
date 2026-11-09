@@ -7,6 +7,10 @@ const getEnvVar = (key: string): string => {
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key] as string;
   }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const local = window.localStorage.getItem(key);
+    if (local) return local;
+  }
   return '';
 };
 
@@ -28,3 +32,19 @@ export const supabase = createClient(
   supabaseUrl || 'https://placeholder-project.supabase.co',
   supabaseAnonKey || 'placeholder-anon-key'
 );
+
+export function saveSupabaseConfig(url: string, key: string) {
+  if (typeof window !== 'undefined') {
+    if (url) localStorage.setItem('VITE_SUPABASE_URL', url.trim());
+    if (key) localStorage.setItem('VITE_SUPABASE_ANON_KEY', key.trim());
+    window.location.reload();
+  }
+}
+
+export function clearSupabaseConfig() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('VITE_SUPABASE_URL');
+    localStorage.removeItem('VITE_SUPABASE_ANON_KEY');
+    window.location.reload();
+  }
+}

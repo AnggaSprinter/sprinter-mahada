@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Task, Vendor, Karyawan, Recap, AppData } from './types.ts';
 import * as api from './services/api.ts';
 import { useAuth, AuthProvider } from './context/AuthContext.tsx';
+import { supabaseUrl, supabaseAnonKey, saveSupabaseConfig } from './lib/supabase.ts';
 
 function formatTimeAgo(dateStr: string): string {
   if (!dateStr) return '-';
@@ -246,6 +247,20 @@ export function SprinterApp() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState('Sprinter');
   const [newCategoryName, setNewCategoryName] = useState('');
+
+  // Supabase Direct Config state
+  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>(supabaseUrl || '');
+  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>(supabaseAnonKey || '');
+  const [showConfigForm, setShowConfigForm] = useState<boolean>(!isSupabaseConfigured);
+
+  const handleSaveDirectSupabase = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputSupabaseUrl.trim() || !inputSupabaseKey.trim()) {
+      showToast('URL dan Anon Key Supabase wajib diisi');
+      return;
+    }
+    saveSupabaseConfig(inputSupabaseUrl.trim(), inputSupabaseKey.trim());
+  };
 
   // Dark mode effect
   useEffect(() => {
@@ -2756,6 +2771,95 @@ export function SprinterApp() {
                       <span>{isAppInstalled ? 'Petunjuk Instalasi' : 'Pasang di Handphone'}</span>
                     </button>
                   </div>
+                </div>
+
+                {/* 1.5. KONEKSI DIRECT SUPABASE DATABASE */}
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                      <i className="bi bi-database-fill-check text-teal-500"></i> Koneksi Database Supabase
+                    </h3>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${isSupabaseConfigured
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                      }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseConfigured ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
+                      {isSupabaseConfigured ? 'Terhubung Langsung' : 'Kunci Belum Diisi'}
+                    </span>
+                  </div>
+
+                  {isSupabaseConfigured && !showConfigForm ? (
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                        <span className="text-slate-400">Status Akses:</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                          <i className="bi bi-check-circle-fill"></i> Langsung ke Supabase (Tanpa Server Vercel)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                        <span className="text-slate-400">Project URL:</span>
+                        <span className="font-mono font-bold truncate max-w-[200px]">{supabaseUrl}</span>
+                      </div>
+                      <div className="pt-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setShowConfigForm(true)}
+                          className="text-xs text-teal-600 dark:text-teal-400 hover:underline font-bold cursor-pointer"
+                        >
+                          Ubah Kunci Supabase
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSaveDirectSupabase} className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Agar aplikasi langsung membaca dan menyimpan data ke Supabase tanpa terkena limit serverless Vercel, pastikan <strong>Project URL</strong> dan <strong>anon key</strong> Supabase Anda sudah terisi di bawah ini:
+                      </p>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                          Project URL Supabase
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          value={inputSupabaseUrl}
+                          onChange={(e) => setInputSupabaseUrl(e.target.value)}
+                          placeholder="https://your-project.supabase.co"
+                          className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-800 dark:text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                          Anon Public Key Supabase
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          value={inputSupabaseKey}
+                          onChange={(e) => setInputSupabaseKey(e.target.value)}
+                          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                          className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono text-slate-800 dark:text-slate-200"
+                        ></textarea>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          className="flex-1 py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs cursor-pointer transition shadow-xs"
+                        >
+                          Simpan &amp; Hubungkan Langsung
+                        </button>
+                        {isSupabaseConfigured && (
+                          <button
+                            type="button"
+                            onClick={() => setShowConfigForm(false)}
+                            className="py-2.5 px-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  )}
                 </div>
 
                 {/* 2. SUPABASE AUTHENTICATION */}
