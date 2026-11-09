@@ -724,6 +724,18 @@ export function SprinterApp() {
     };
   }, []);
 
+  // Keyboard shortcut listener to close modals/lightbox on Esc
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (previewImage) setPreviewImage(null);
+        if (isCameraActive) stopCameraStream();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewImage, isCameraActive]);
+
   // Open Status modal
   const handleOpenStatusModal = (task: Task) => {
     setStatusModalTask(task);
@@ -1588,55 +1600,103 @@ export function SprinterApp() {
                         )}
                       </div>
 
-                      {/* Itinerary Route (Dari -> Tujuan) */}
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs space-y-2.5 mb-3">
-                        {t.Dari && (
+                      {/* Itinerary Route & Bukti Foto Penerima */}
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-3 sm:p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs mb-3 flex flex-col sm:flex-row items-stretch justify-between gap-3">
+                        {/* Kolom Kiri: Rute Jemput & Tujuan */}
+                        <div className="flex-1 min-w-0 space-y-2.5">
+                          {t.Dari && (
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-2.5 h-2.5 rounded-full border-2 border-teal-500 bg-white dark:bg-slate-900 mt-1 shrink-0"></div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
+                                  Jemput / Dari
+                                </span>
+                                <a
+                                  href={resDari.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs max-w-full"
+                                  title={t.Dari}
+                                >
+                                  <i className="bi bi-geo-alt-fill text-rose-500 text-xs shrink-0"></i>
+                                  <span className="font-bold truncate">
+                                    {resDari.vendorMatch ? resDari.vendorMatch.Nama : (t.Dari.split(' - ')[0] || t.Dari)}
+                                  </span>
+                                  <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal shrink-0">(Buka Maps)</span>
+                                  <i className="bi bi-box-arrow-up-right text-[9px] opacity-70 shrink-0"></i>
+                                </a>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex items-start gap-2.5">
-                            <div className="w-2.5 h-2.5 rounded-full border-2 border-teal-500 bg-white dark:bg-slate-900 mt-1 shrink-0"></div>
+                            <i className="bi bi-geo-alt-fill text-rose-500 mt-1 text-sm shrink-0"></i>
                             <div className="flex-1 min-w-0">
                               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
-                                Jemput / Dari
+                                Tujuan Pengiriman
                               </span>
                               <a
-                                href={resDari.url}
+                                href={resTujuan.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs"
-                                title={t.Dari}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs max-w-full"
+                                title={t.Tujuan}
                               >
-                                <i className="bi bi-geo-alt-fill text-rose-500 text-xs"></i>
-                                <span className="font-bold">
-                                  {resDari.vendorMatch ? resDari.vendorMatch.Nama : (t.Dari.split(' - ')[0] || t.Dari)}
+                                <i className="bi bi-geo-alt-fill text-rose-500 text-xs shrink-0"></i>
+                                <span className="font-bold truncate">
+                                  {resTujuan.vendorMatch ? resTujuan.vendorMatch.Nama : (t.Tujuan.split(' - ')[0] || t.Tujuan)}
                                 </span>
-                                <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
-                                <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
+                                <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal shrink-0">(Buka Maps)</span>
+                                <i className="bi bi-box-arrow-up-right text-[9px] opacity-70 shrink-0"></i>
                               </a>
                             </div>
                           </div>
-                        )}
-
-                        <div className="flex items-start gap-2.5">
-                          <i className="bi bi-geo-alt-fill text-rose-500 mt-1 text-sm shrink-0"></i>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
-                              Tujuan Pengiriman
-                            </span>
-                            <a
-                              href={resTujuan.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs"
-                              title={t.Tujuan}
-                            >
-                              <i className="bi bi-geo-alt-fill text-rose-500 text-xs"></i>
-                              <span className="font-bold">
-                                {resTujuan.vendorMatch ? resTujuan.vendorMatch.Nama : (t.Tujuan.split(' - ')[0] || t.Tujuan)}
-                              </span>
-                              <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
-                              <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
-                            </a>
-                          </div>
                         </div>
+
+                        {/* Kolom Kanan: Bukti Foto Penerima di bagian kosong kartu */}
+                        {t.FotoPenerima ? (
+                          <div className="flex flex-col items-center sm:items-end justify-center pt-2.5 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-200/80 dark:border-slate-700/60 sm:pl-3.5 shrink-0">
+                            <div
+                              onClick={() => setPreviewImage(t.FotoPenerima || null)}
+                              className="relative group cursor-pointer overflow-hidden rounded-xl border-2 border-teal-500/30 hover:border-teal-500 shadow-2xs hover:shadow-md transition-all w-24 h-24 sm:w-28 sm:h-28 bg-slate-900 flex items-center justify-center shrink-0"
+                              title="Klik untuk perbesar foto penerima"
+                            >
+                              <img
+                                src={t.FotoPenerima}
+                                alt="Foto Bukti Penerima"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[11px] font-bold gap-1">
+                                <i className="bi bi-zoom-in text-lg"></i>
+                                <span>Perbesar</span>
+                              </div>
+                              <span className="absolute bottom-1 right-1 bg-black/70 backdrop-blur-xs text-[9px] text-white px-1.5 py-0.5 rounded font-medium flex items-center gap-1 pointer-events-none">
+                                <i className="bi bi-camera-fill text-teal-400"></i> Bukti
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewImage(t.FotoPenerima || null)}
+                              className="mt-1 text-[11px] font-bold text-teal-700 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <i className="bi bi-zoom-in"></i> Klik preview
+                            </button>
+                          </div>
+                        ) : t.Status === 'Selesai' ? (
+                          <div className="flex flex-col items-center sm:items-end justify-center pt-2.5 sm:pt-0 border-t sm:border-t-0 sm:border-l border-slate-200/80 dark:border-slate-700/60 sm:pl-3.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setEditModalTask(t)}
+                              className="w-full sm:w-28 h-20 sm:h-28 border-2 border-dashed border-teal-300 dark:border-teal-700/80 hover:border-teal-500 dark:hover:border-teal-400 rounded-xl bg-teal-50/40 dark:bg-teal-950/20 hover:bg-teal-50 dark:hover:bg-teal-900/30 flex flex-col items-center justify-center gap-1.5 text-teal-700 dark:text-teal-300 p-2 text-center transition cursor-pointer group"
+                              title="Ambil atau upload bukti foto penerima"
+                            >
+                              <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/60 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i className="bi bi-camera-fill text-teal-600 dark:text-teal-300 text-xs"></i>
+                              </div>
+                              <span className="text-[10px] font-bold leading-tight">Tambah Foto Bukti</span>
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
 
                       {/* PIC & Cost Details */}
@@ -1671,35 +1731,6 @@ export function SprinterApp() {
                               Penerima: <strong className="text-slate-700 dark:text-slate-300">{t.Penerima}</strong>
                             </div>
                           )}
-                        </div>
-                      )}
-
-                      {/* Bukti Foto Penerima */}
-                      {t.FotoPenerima && (
-                        <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200/90 dark:border-slate-700/80 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <img
-                              src={t.FotoPenerima}
-                              alt="Bukti Penerima"
-                              onClick={() => setPreviewImage(t.FotoPenerima || null)}
-                              className="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 cursor-pointer shadow-2xs hover:scale-105 transition-transform shrink-0"
-                            />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                                <i className="bi bi-camera-fill text-teal-600 dark:text-teal-400"></i> Bukti Foto Penerima
-                              </p>
-                              <p className="text-[11px] text-slate-500 truncate">
-                                {t.Penerima ? `Diterima: ${t.Penerima}` : 'Foto telah didokumentasikan'}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewImage(t.FotoPenerima || null)}
-                            className="text-xs px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 font-bold rounded-lg cursor-pointer transition shrink-0 flex items-center gap-1"
-                          >
-                            <i className="bi bi-zoom-in"></i> Lihat
-                          </button>
                         </div>
                       )}
 
@@ -3870,7 +3901,7 @@ export function SprinterApp() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setPreviewImage(null);
           }}
-          className="fixed inset-0 bg-black/80 z-[10000] flex flex-col justify-center items-center p-4 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 bg-black/85 z-[10000] flex flex-col justify-center items-center p-4 backdrop-blur-md animate-fade-in"
         >
           <div className="relative max-w-2xl w-full flex flex-col items-center">
             <div className="w-full flex justify-between items-center mb-3 text-white">
@@ -3890,19 +3921,23 @@ export function SprinterApp() {
                   type="button"
                   onClick={() => setPreviewImage(null)}
                   className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition cursor-pointer"
-                  title="Tutup"
+                  title="Tutup (Esc)"
                 >
                   <i className="bi bi-x-lg"></i>
                 </button>
               </div>
             </div>
-            <div className="bg-slate-950 rounded-2xl overflow-hidden border border-white/10 shadow-2xl max-h-[80vh] flex items-center justify-center">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-950 rounded-2xl overflow-hidden border border-white/20 shadow-2xl max-h-[80vh] flex items-center justify-center p-1"
+            >
               <img
                 src={previewImage}
                 alt="Bukti Penerima"
-                className="max-w-full max-h-[78vh] object-contain rounded-xl"
+                className="max-w-full max-h-[78vh] object-contain rounded-xl select-none"
               />
             </div>
+            <p className="text-white/60 text-xs mt-3">Klik di luar gambar atau tekan Esc untuk menutup</p>
           </div>
         </div>
       )}
