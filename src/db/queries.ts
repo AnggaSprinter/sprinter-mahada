@@ -6,33 +6,16 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
 export async function getAllData() {
   if (isSupabaseConfigured) {
     try {
-      const [tasksRes, vendorsRes, categoriesRes, karyawanRes, recapsRes, sprinterLocsRes] = await Promise.all([
+      const [tasksRes, vendorsRes, categoriesRes, karyawanRes, recapsRes] = await Promise.all([
         supabase.from('tasks').select('*').order('waktu_update', { ascending: false }),
         supabase.from('vendors').select('*').order('nama', { ascending: true }),
         supabase.from('categories').select('*').order('nama', { ascending: true }),
         supabase.from('karyawan').select('*').order('nama', { ascending: true }),
         supabase.from('recaps').select('*').order('tanggal', { ascending: false }),
-        supabase.from('sprinter_locations').select('*').order('waktu_update', { ascending: false }),
       ]);
 
       if (!tasksRes.error && tasksRes.data) {
         const existingUsers = karyawanRes.data || [];
-        const existingUserIds = new Set(existingUsers.map((k: any) => k.id));
-        const existingUserNames = new Set(existingUsers.map((k: any) => (k.nama || '').trim().toLowerCase()));
-
-        // Only include sprinter locations for karyawan that still exist in the database, and deduplicate by name
-        const locMap = new Map<string, any>();
-        for (const l of (sprinterLocsRes?.data || [])) {
-          const name = (l.karyawan_nama || '').trim().toLowerCase();
-          const validUser =
-            existingUserIds.has(l.karyawan_id) ||
-            existingUserIds.has(l.id) ||
-            existingUserNames.has(name);
-          if (validUser && name && !locMap.has(name)) {
-            locMap.set(name, l);
-          }
-        }
-        const validSprinterLocs = Array.from(locMap.values());
 
         return {
           tasks: tasksRes.data.map((t: any) => ({
@@ -72,17 +55,7 @@ export async function getAllData() {
             Karyawan: r.karyawan || '',
             UangCash: r.uang_cash,
           })),
-          sprinterLocations: validSprinterLocs.map((l: any) => ({
-            id: l.id,
-            karyawanId: l.karyawan_id,
-            karyawanNama: l.karyawan_nama,
-            latitude: parseFloat(l.latitude) || 0,
-            longitude: parseFloat(l.longitude) || 0,
-            accuracy: l.accuracy ? parseFloat(l.accuracy) : undefined,
-            speed: l.speed ? parseFloat(l.speed) : undefined,
-            waktuUpdate: l.waktu_update,
-            isActive: l.is_active === 'true' || l.is_active === true,
-          })),
+          sprinterLocations: [],
         };
       }
     } catch (err) {
@@ -91,13 +64,12 @@ export async function getAllData() {
   }
 
   try {
-    const [allTasks, allVendors, allCategories, allKaryawan, allRecaps, allSprinterLocs] = await Promise.all([
+    const [allTasks, allVendors, allCategories, allKaryawan, allRecaps] = await Promise.all([
       db.select().from(tasks).orderBy(desc(tasks.waktuUpdate)),
       db.select().from(vendors).orderBy(asc(vendors.nama)),
       db.select().from(categories).orderBy(asc(categories.nama)),
       db.select().from(karyawan).orderBy(asc(karyawan.nama)),
       db.select().from(recaps).orderBy(desc(recaps.tanggal)),
-      db.select().from(sprinterLocations).orderBy(desc(sprinterLocations.waktuUpdate)),
     ]);
 
     return {
@@ -138,28 +110,7 @@ export async function getAllData() {
         Karyawan: r.karyawan || '',
         UangCash: r.uangCash,
       })),
-      sprinterLocations: (() => {
-        const activeIds = new Set(allKaryawan.map((k) => k.id));
-        const activeNames = new Set(allKaryawan.map((k) => (k.nama || '').trim().toLowerCase()));
-        return allSprinterLocs
-          .filter(
-            (l) =>
-              activeIds.has(l.karyawanId) ||
-              activeIds.has(l.id) ||
-              activeNames.has((l.karyawanNama || '').trim().toLowerCase())
-          )
-          .map((l) => ({
-            id: l.id,
-            karyawanId: l.karyawanId,
-            karyawanNama: l.karyawanNama,
-            latitude: parseFloat(l.latitude) || 0,
-            longitude: parseFloat(l.longitude) || 0,
-            accuracy: l.accuracy ? parseFloat(l.accuracy) : undefined,
-            speed: l.speed ? parseFloat(l.speed) : undefined,
-            waktuUpdate: l.waktuUpdate,
-            isActive: l.isActive === 'true',
-          }));
-      })(),
+      sprinterLocations: [],
     };
   } catch (error) {
     console.error('Failed to fetch data:', error);
