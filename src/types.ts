@@ -13,6 +13,8 @@ export interface Task {
   KeteranganBiaya: string;
   Status: 'Pending' | 'Dalam Perjalanan' | 'Selesai' | 'Gagal' | string;
   WaktuUpdate: string;
+  WaktuDibuat?: string;
+  WaktuSelesai?: string;
   Penerima: string;
   Catatan: string;
   FotoPenerima?: string;

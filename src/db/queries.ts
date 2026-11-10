@@ -33,6 +33,8 @@ export async function getAllData() {
             KeteranganBiaya: t.keterangan_biaya || '',
             Status: t.status,
             WaktuUpdate: t.waktu_update,
+            WaktuDibuat: t.waktu_dibuat || t.waktu_update || '',
+            WaktuSelesai: t.waktu_selesai || '',
             Penerima: t.penerima || '',
             Catatan: t.catatan || '',
             FotoPenerima: t.foto_penerima || '',
@@ -88,6 +90,8 @@ export async function getAllData() {
         KeteranganBiaya: t.keteranganBiaya || '',
         Status: t.status,
         WaktuUpdate: t.waktuUpdate,
+        WaktuDibuat: t.waktuDibuat || t.waktuUpdate || '',
+        WaktuSelesai: t.waktuSelesai || '',
         Penerima: t.penerima || '',
         Catatan: t.catatan || '',
         FotoPenerima: t.fotoPenerima || '',
@@ -133,6 +137,8 @@ export async function upsertTask(taskData: {
   KeteranganBiaya?: string;
   Status?: string;
   WaktuUpdate?: string;
+  WaktuDibuat?: string;
+  WaktuSelesai?: string;
   Penerima?: string;
   Catatan?: string;
   FotoPenerima?: string;
@@ -152,6 +158,8 @@ export async function upsertTask(taskData: {
     keteranganBiaya: taskData.KeteranganBiaya || '',
     status: taskData.Status || 'Pending',
     waktuUpdate: taskData.WaktuUpdate || new Date().toISOString().replace('T', ' ').substring(0, 19),
+    waktuDibuat: taskData.WaktuDibuat || taskData.WaktuUpdate || new Date().toISOString().replace('T', ' ').substring(0, 19),
+    waktuSelesai: taskData.WaktuSelesai || '',
     penerima: taskData.Penerima || '',
     catatan: taskData.Catatan || '',
     fotoPenerima: taskData.FotoPenerima || '',
@@ -174,6 +182,8 @@ export async function upsertTask(taskData: {
         keterangan_biaya: formatted.keteranganBiaya,
         status: formatted.status,
         waktu_update: formatted.waktuUpdate,
+        waktu_dibuat: formatted.waktuDibuat,
+        waktu_selesai: formatted.waktuSelesai,
         penerima: formatted.penerima,
         catatan: formatted.catatan,
         foto_penerima: formatted.fotoPenerima,

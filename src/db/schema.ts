@@ -51,6 +51,8 @@ export const tasks = pgTable('tasks', {
   keteranganBiaya: text('keterangan_biaya').default(''),
   status: varchar('status', { length: 32 }).notNull().default('Pending'),
   waktuUpdate: text('waktu_update').notNull(),
+  waktuDibuat: text('waktu_dibuat').default(''),
+  waktuSelesai: text('waktu_selesai').default(''),
   penerima: text('penerima').default(''),
   catatan: text('catatan').default(''),
   fotoPenerima: text('foto_penerima').default(''),

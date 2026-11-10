@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     keterangan_biaya TEXT DEFAULT '',
     status VARCHAR(32) DEFAULT 'Pending' NOT NULL,
     waktu_update TEXT NOT NULL,
+    waktu_dibuat TEXT DEFAULT '',
+    waktu_selesai TEXT DEFAULT '',
     penerima TEXT DEFAULT '',
     catatan TEXT DEFAULT '',
     foto_penerima TEXT DEFAULT '',

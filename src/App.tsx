@@ -403,14 +403,16 @@ export function SprinterApp() {
         totalHariIni++;
         prosHariIni++;
       } else if (t.Status === 'Selesai') {
-        if (isToday) {
+        const selesaiDate = (t.WaktuSelesai || t.WaktuUpdate || '').split(' ')[0];
+        if (selesaiDate === todayStr) {
           totalHariIni++;
           selHariIni++;
           byaHariIni += Number(t.Biaya) || 0;
         }
-        if (t.WaktuUpdate >= lastTime) {
-          lastTime = t.WaktuUpdate;
-          const tJam = (t.WaktuUpdate.split(' ')[1] || '').substring(0, 5);
+        const timeRef = t.WaktuSelesai || t.WaktuUpdate || '';
+        if (timeRef >= lastTime) {
+          lastTime = timeRef;
+          const tJam = (timeRef.split(' ')[1] || '').substring(0, 5);
           lastLokasi = `${t.Tujuan}${tJam ? ` (${tJam})` : ''}`;
         }
       } else if (t.Status === 'Gagal' || t.Status === 'Batal') {
@@ -438,8 +440,8 @@ export function SprinterApp() {
 
     // Disusun berdasarkan input terbaru (terbaru di atas)
     list.sort((a, b) => {
-      const timeA = a.WaktuUpdate || '';
-      const timeB = b.WaktuUpdate || '';
+      const timeA = statusFilter === 'Selesai' ? (a.WaktuSelesai || a.WaktuUpdate || '') : (a.WaktuUpdate || a.WaktuDibuat || '');
+      const timeB = statusFilter === 'Selesai' ? (b.WaktuSelesai || b.WaktuUpdate || '') : (b.WaktuUpdate || b.WaktuDibuat || '');
       if (timeA !== timeB) {
         return timeB.localeCompare(timeA);
       }
@@ -453,11 +455,12 @@ export function SprinterApp() {
         (t.JudulTugas + ' ' + t.Tujuan + ' ' + t.PIC + ' ' + t.Karyawan + ' ' + t.Invoice)
           .toLowerCase()
           .includes(kw);
-      // Filter tanggal khusus untuk tab Selesai: Default HARI INI saja
+      // Filter tanggal khusus untuk tab Selesai: Menggunakan WaktuSelesai (atau WaktuUpdate)
       const effectiveSelesaiDate = selesaiDateFilter || getTodayDateString();
+      const selesaiDate = (t.WaktuSelesai || t.WaktuUpdate || '').split(' ')[0];
       const matchDate =
         statusFilter !== 'Selesai' ||
-        (t.WaktuUpdate && t.WaktuUpdate.startsWith(effectiveSelesaiDate));
+        selesaiDate === effectiveSelesaiDate;
       return matchStatus && matchKw && matchDate;
     });
   }, [data.tasks, searchQuery, statusFilter, selesaiDateFilter]);
@@ -474,7 +477,8 @@ export function SprinterApp() {
     for (const t of data.tasks) {
       if (t.Status === 'Selesai') {
         // Hitung tugas selesai hanya untuk tanggal aktif (default hari ini)
-        if (t.WaktuUpdate && t.WaktuUpdate.startsWith(effectiveSelesaiDate)) {
+        const selesaiDate = (t.WaktuSelesai || t.WaktuUpdate || '').split(' ')[0];
+        if (selesaiDate === effectiveSelesaiDate) {
           counts['Selesai']++;
         }
       } else if (t.Status && t.Status in counts) {
@@ -516,6 +520,7 @@ export function SprinterApp() {
     }
 
     const id = `TSK-${getJakartaTimeString().replace(/[- :]/g, '')}-${Math.floor(Math.random() * 90 + 10)}`;
+    const nowStr = getJakartaTimeString();
     const newTask: Task = {
       ID: id,
       Karyawan: addKaryawan || (data.users[0] ? `${data.users[0].Nama} (${data.users[0].Posisi})` : 'Sprinter'),
@@ -530,9 +535,12 @@ export function SprinterApp() {
       Biaya: 0,
       KeteranganBiaya: '',
       Status: 'Pending',
-      WaktuUpdate: getJakartaTimeString(),
+      WaktuDibuat: nowStr,
+      WaktuUpdate: nowStr,
+      WaktuSelesai: '',
       Penerima: '',
       Catatan: '',
+      FotoPenerima: '',
     };
 
     setIsLoading(true);
@@ -568,6 +576,7 @@ export function SprinterApp() {
     const updated: Task = {
       ...task,
       Status: 'Dalam Perjalanan',
+      WaktuDibuat: task.WaktuDibuat || task.WaktuUpdate || getJakartaTimeString(),
       WaktuUpdate: getJakartaTimeString(),
     };
     try {
@@ -754,6 +763,16 @@ export function SprinterApp() {
       return;
     }
 
+    const nowStr = getJakartaTimeString();
+    let finalWaktuSelesai = statusModalTask.WaktuSelesai || '';
+    if (modalStatusChoice === 'Selesai') {
+      if (!finalWaktuSelesai) {
+        finalWaktuSelesai = nowStr;
+      }
+    } else {
+      finalWaktuSelesai = '';
+    }
+
     const updated: Task = {
       ...statusModalTask,
       Status: modalStatusChoice,
@@ -762,7 +781,9 @@ export function SprinterApp() {
       Penerima: modalPenerima.trim(),
       Catatan: modalCatatan.trim(),
       FotoPenerima: modalFotoPenerima.trim(),
-      WaktuUpdate: getJakartaTimeString(),
+      WaktuDibuat: statusModalTask.WaktuDibuat || statusModalTask.WaktuUpdate || nowStr,
+      WaktuUpdate: nowStr,
+      WaktuSelesai: finalWaktuSelesai,
     };
 
     setIsLoading(true);
@@ -790,7 +811,11 @@ export function SprinterApp() {
     try {
       const updated: Task = {
         ...editModalTask,
+        WaktuDibuat: editModalTask.WaktuDibuat || editModalTask.WaktuUpdate || getJakartaTimeString(),
         WaktuUpdate: getJakartaTimeString(),
+        WaktuSelesai: editModalTask.Status === 'Selesai'
+          ? (editModalTask.WaktuSelesai || editModalTask.WaktuUpdate || getJakartaTimeString())
+          : (editModalTask.WaktuSelesai || ''),
       };
       await api.apiSaveTask(updated);
       setData((prev) => ({
@@ -1533,15 +1558,11 @@ export function SprinterApp() {
                       className="bg-white dark:bg-slate-900 p-4 md:p-5 rounded-2xl shadow-2xs border border-slate-200/90 dark:border-slate-800/90 transition-all hover:border-slate-300 dark:hover:border-slate-700"
                     >
                       {/* Top Header of Card */}
-                      <div className="flex justify-between items-start gap-2 mb-2.5">
+                      <div className="flex justify-between items-start gap-2 mb-2">
                         <div className="flex flex-wrap items-center gap-1.5 md:gap-2 text-xs text-slate-500 dark:text-slate-400">
                           <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                             <i className="bi bi-person-circle text-teal-600 dark:text-teal-400"></i>
                             {t.Karyawan || '-'}
-                          </span>
-                          <span className="text-slate-300 dark:text-slate-700">&bull;</span>
-                          <span className="font-mono text-[11px] text-slate-500">
-                            {formatTaskTime(t.WaktuUpdate)}
                           </span>
                           <span className="text-slate-300 dark:text-slate-700">&bull;</span>
                           <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
@@ -1567,6 +1588,60 @@ export function SprinterApp() {
                         >
                           {t.Status === 'Dalam Perjalanan' ? 'Diproses' : t.Status === 'Gagal' ? 'Batal' : t.Status}
                         </span>
+                      </div>
+
+                      {/* Timeline Bar: Tanggal Pengajuan, Tanggal Proses & Tanggal Selesai */}
+                      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-3 pb-2.5 border-b border-slate-100 dark:border-slate-800/80">
+                        {/* Tanggal Pengajuan / Dibuat (Tetap & tidak berubah) */}
+                        <div className="flex items-center gap-1.5" title="Tanggal & Jam Tugas Diajukan (Tetap)">
+                          <i className="bi bi-calendar-plus text-teal-600 dark:text-teal-400"></i>
+                          <span className="font-sans text-slate-400 dark:text-slate-400">Pengajuan:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200">
+                            {formatTaskTime(t.WaktuDibuat || t.WaktuUpdate)}
+                          </span>
+                        </div>
+
+                        {/* Tanggal Proses (Muncul saat status Diproses / Dalam Perjalanan) */}
+                        {t.Status === 'Dalam Perjalanan' && (
+                          <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400" title="Waktu Mulai Diproses">
+                            <i className="bi bi-arrow-repeat"></i>
+                            <span className="font-sans opacity-90">Diproses:</span>
+                            <span className="font-bold">
+                              {formatTaskTime(t.WaktuUpdate)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Tanggal Selesai (Tetap setelah Selesai) */}
+                        {t.Status === 'Selesai' && (
+                          <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400" title="Waktu Tugas Selesai (Tetap)">
+                            <i className="bi bi-check2-circle"></i>
+                            <span className="font-sans opacity-90">Selesai:</span>
+                            <span className="font-bold">
+                              {formatTaskTime(t.WaktuSelesai || t.WaktuUpdate)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Tanggal Batal (Jika Batal/Gagal) */}
+                        {t.Status === 'Gagal' && (
+                          <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-400" title="Waktu Dibatalkan">
+                            <i className="bi bi-x-circle"></i>
+                            <span className="font-sans opacity-90">Batal:</span>
+                            <span className="font-bold">
+                              {formatTaskTime(t.WaktuUpdate)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Update Tambahan jika ada perubahan catatan/biaya di status Pending */}
+                        {t.Status === 'Pending' && t.WaktuUpdate && t.WaktuDibuat && t.WaktuUpdate !== t.WaktuDibuat && (
+                          <div className="flex items-center gap-1 text-slate-400" title="Terakhir Diperbarui">
+                            <i className="bi bi-clock-history"></i>
+                            <span className="font-sans">Update:</span>
+                            <span>{formatTaskTime(t.WaktuUpdate)}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Title & Optional Invoice */}
@@ -3487,6 +3562,36 @@ export function SprinterApp() {
                     onChange={(e) => setEditModalTask({ ...editModalTask, Catatan: e.target.value })}
                     className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm"
                   />
+                </div>
+              </div>
+
+              {/* Tanggal Pengajuan & Tanggal Selesai */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center gap-1">
+                    <i className="bi bi-calendar-plus text-teal-600"></i> Tgl Pengajuan
+                  </label>
+                  <input
+                    type="text"
+                    value={editModalTask.WaktuDibuat || editModalTask.WaktuUpdate || ''}
+                    onChange={(e) => setEditModalTask({ ...editModalTask, WaktuDibuat: e.target.value })}
+                    placeholder="YYYY-MM-DD HH:mm:ss"
+                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-xs font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Waktu awal dibuat (tetap)</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center gap-1">
+                    <i className="bi bi-check2-circle text-emerald-600"></i> Tgl Selesai
+                  </label>
+                  <input
+                    type="text"
+                    value={editModalTask.WaktuSelesai || ''}
+                    onChange={(e) => setEditModalTask({ ...editModalTask, WaktuSelesai: e.target.value })}
+                    placeholder="YYYY-MM-DD HH:mm:ss"
+                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-xs font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Waktu selesai (tetap)</p>
                 </div>
               </div>
 
