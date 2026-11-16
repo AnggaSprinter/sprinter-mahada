@@ -213,54 +213,64 @@ export async function fetchAllData(force = false): Promise<AppData> {
         if (needsTasksFetch) {
           queryKeys.push('tasks');
           queriesToRun.push(
-            supabase
-              .from('tasks')
-              .select(
-                'id, karyawan, judul_tugas, invoice, kategori, dari, tujuan, prioritas, pic, no_hp, biaya, keterangan_biaya, status, waktu_update, waktu_dibuat, waktu_selesai, penerima, catatan, foto_penerima'
-              )
-              .order('waktu_update', { ascending: false })
-              .limit(100)
+            Promise.resolve(
+              supabase
+                .from('tasks')
+                .select(
+                  'id, karyawan, judul_tugas, invoice, kategori, dari, tujuan, prioritas, pic, no_hp, biaya, keterangan_biaya, status, waktu_update, waktu_dibuat, waktu_selesai, penerima, catatan, foto_penerima'
+                )
+                .order('waktu_update', { ascending: false })
+                .limit(100)
+            )
           );
         }
 
         if (!currentVendors) {
           queryKeys.push('vendors');
           queriesToRun.push(
-            supabase
-              .from('vendors')
-              .select('id, nama, no_hp, alamat, link_maps')
-              .order('nama', { ascending: true })
+            Promise.resolve(
+              supabase
+                .from('vendors')
+                .select('id, nama, no_hp, alamat, link_maps')
+                .order('nama', { ascending: true })
+            )
           );
         }
 
         if (!currentCategories) {
           queryKeys.push('categories');
           queriesToRun.push(
-            supabase
-              .from('categories')
-              .select('id, nama')
-              .order('nama', { ascending: true })
+            Promise.resolve(
+              supabase
+                .from('categories')
+                .select('id, nama')
+                .order('nama', { ascending: true })
+            )
           );
         }
 
         if (!currentKaryawan) {
           queryKeys.push('karyawan');
           queriesToRun.push(
-            supabase
-              .from('karyawan')
-              .select('id, nama, posisi')
-              .order('nama', { ascending: true })
+            Promise.resolve(
+              supabase
+                .from('karyawan')
+                .select('id, nama, posisi')
+                .order('nama', { ascending: true })
+            )
           );
         }
 
         if (!currentRecaps) {
           queryKeys.push('recaps');
           queriesToRun.push(
-            supabase
-              .from('recaps')
-              .select('tanggal, karyawan, uang_cash')
-              .order('tanggal', { ascending: false })
-              .limit(31) // Cukup 1 bulan terakhir
+            Promise.resolve(
+              supabase
+                .from('recaps')
+                .select('tanggal, karyawan, uang_cash')
+                .order('tanggal', { ascending: false })
+                .limit(31) // Cukup 1 bulan terakhir
+            )
           );
         }
 
@@ -303,36 +313,40 @@ export async function fetchAllData(force = false): Promise<AppData> {
                 FotoPenerima: t.foto_penerima || '',
               }));
               const latestUpdateTime = mappedTasks[0]?.WaktuUpdate || '';
-              tasksCache = { data: mappedTasks, lastUpdateTime, timestamp: now };
+              tasksCache = { data: mappedTasks, lastUpdateTime: latestUpdateTime, timestamp: now };
             } else if (key === 'vendors' && res.data) {
-              currentVendors = res.data.map((v: any) => ({
+              const mappedVendors: Vendor[] = res.data.map((v: any) => ({
                 ID: v.id,
                 Nama: v.nama,
                 NoHP: v.no_hp || '',
                 Alamat: v.alamat || '',
                 LinkMaps: v.link_maps || '',
               }));
-              vendorsCache = { data: currentVendors, timestamp: now };
-              setLocalMasterCache('sprinter_cache_vendors', currentVendors);
+              currentVendors = mappedVendors;
+              vendorsCache = { data: mappedVendors, timestamp: now };
+              setLocalMasterCache('sprinter_cache_vendors', mappedVendors);
             } else if (key === 'categories' && res.data) {
-              currentCategories = res.data.map((c: any) => c.nama);
-              categoriesCache = { data: currentCategories, timestamp: now };
-              setLocalMasterCache('sprinter_cache_categories', currentCategories);
+              const mappedCategories: string[] = res.data.map((c: any) => c.nama);
+              currentCategories = mappedCategories;
+              categoriesCache = { data: mappedCategories, timestamp: now };
+              setLocalMasterCache('sprinter_cache_categories', mappedCategories);
             } else if (key === 'karyawan' && res.data) {
-              currentKaryawan = res.data.map((k: any) => ({
+              const mappedKaryawan: Karyawan[] = res.data.map((k: any) => ({
                 ID: k.id,
                 Nama: k.nama,
                 Posisi: k.posisi || 'Sprinter',
               }));
-              karyawanCache = { data: currentKaryawan, timestamp: now };
-              setLocalMasterCache('sprinter_cache_karyawan', currentKaryawan);
+              currentKaryawan = mappedKaryawan;
+              karyawanCache = { data: mappedKaryawan, timestamp: now };
+              setLocalMasterCache('sprinter_cache_karyawan', mappedKaryawan);
             } else if (key === 'recaps' && res.data) {
-              currentRecaps = res.data.map((r: any) => ({
+              const mappedRecaps: Recap[] = res.data.map((r: any) => ({
                 Tanggal: r.tanggal,
                 Karyawan: r.karyawan || '',
                 UangCash: Number(r.uang_cash) || 0,
               }));
-              recapsCache = { data: currentRecaps, timestamp: now };
+              currentRecaps = mappedRecaps;
+              recapsCache = { data: mappedRecaps, timestamp: now };
             }
           }
         }
