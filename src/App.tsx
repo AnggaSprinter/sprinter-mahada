@@ -179,6 +179,18 @@ export function SprinterApp() {
   const [loadingText, setLoadingText] = useState<string>('SINKRONISASI...');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Quota circuit breaker state (HTTP 402)
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState<boolean>(false);
+  const [quotaErrorMessage, setQuotaErrorMessage] = useState<string>('');
+
+  useEffect(() => {
+    const unsub = api.subscribeQuotaState((blocked, msg) => {
+      setIsQuotaExceeded(blocked);
+      setQuotaErrorMessage(msg);
+    });
+    return unsub;
+  }, []);
+
   // Filter in Home (cuma Pending, Diproses/Dalam Perjalanan, Selesai, Batal/Gagal)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Pending' | 'Dalam Perjalanan' | 'Selesai' | 'Gagal'>('Pending');
@@ -337,14 +349,14 @@ export function SprinterApp() {
   };
 
 
-  // Initial & periodic data fetch
-  const refreshData = async (silent = false) => {
+  // Initial & periodic data fetch (with smart caching & visibility detection)
+  const refreshData = async (silent = false, force = false) => {
     if (!silent) {
       setIsLoading(true);
       setLoadingText('SINKRONISASI DATABASE...');
     }
     try {
-      const result = await api.fetchAllData();
+      const result = await api.fetchAllData(force);
       setData(result);
     } catch (e: any) {
       console.error('Refresh error:', e);
@@ -355,12 +367,36 @@ export function SprinterApp() {
   };
 
   useEffect(() => {
+    // Initial fetch on mount
     refreshData(false);
+
+    // Smart background polling:
+    // 1. Pauses when tab is hidden (document.hidden)
+    // 2. Pauses when Supabase returns 402 Quota Exceeded
+    // 3. Interval is 60 seconds (instead of 15 seconds) to save bandwidth
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isQuotaExceeded) return;
       refreshData(true);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    }, 60000);
+
+    // Visibility change handler: refresh data when user returns to tab
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden && !isQuotaExceeded) {
+        refreshData(true);
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
+  }, [isQuotaExceeded]);
 
   // Sync recap state when reportDate changes
   useEffect(() => {
@@ -593,8 +629,8 @@ export function SprinterApp() {
     }
   };
 
-  // Camera & Image Handlers
-  const compressImage = async (fileOrDataUrl: File | string, maxWidth = 1024, quality = 0.75): Promise<string> => {
+  // Camera & Image Handlers (Optimized for low bandwidth / egress)
+  const compressImage = async (fileOrDataUrl: File | string, maxWidth = 640, quality = 0.65): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -682,7 +718,7 @@ export function SprinterApp() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const raw = canvas.toDataURL('image/jpeg', 0.85);
       try {
-        const compressed = await compressImage(raw, 1024, 0.75);
+        const compressed = await compressImage(raw, 640, 0.65);
         setModalFotoPenerima(compressed);
         showToast('Foto penerima berhasil diambil!');
       } catch {
@@ -703,7 +739,7 @@ export function SprinterApp() {
     if (!files || files.length === 0) return;
     const file = files[0];
     try {
-      const compressed = await compressImage(file, 1024, 0.75);
+      const compressed = await compressImage(file, 640, 0.65);
       if (isEdit) {
         setEditModalTask((prev) => (prev ? { ...prev, FotoPenerima: compressed } : null));
       } else {
@@ -1342,8 +1378,11 @@ export function SprinterApp() {
 
               <button
                 type="button"
-                onClick={() => refreshData(true)}
-                title="Sinkronisasi Data"
+                onClick={() => {
+                  api.resetQuotaState();
+                  refreshData(false, true);
+                }}
+                title="Sinkronisasi Data (Paksa Muat Ulang)"
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 transition border border-slate-700 text-slate-300 hover:text-white cursor-pointer active:scale-95"
               >
                 <i className="bi bi-arrow-clockwise text-sm"></i>
@@ -1371,6 +1410,42 @@ export function SprinterApp() {
             </div>
           </div>
         </header>
+
+        {/* BANNER LIMIT KUOTA SUPABASE (HTTP 402 EGRESS NOTICE) */}
+        {isQuotaExceeded && (
+          <div className="bg-amber-500/10 dark:bg-amber-950/40 border-b border-amber-500/30 px-4 py-3 text-amber-800 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <i className="bi bi-exclamation-triangle-fill text-amber-600 dark:text-amber-400 text-lg shrink-0 mt-0.5"></i>
+              <div className="flex-1 text-xs">
+                <p className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-1.5">
+                  <span>Peringatan Kuota Supabase Egress (HTTP 402)</span>
+                </p>
+                <p className="mt-0.5 text-amber-700 dark:text-amber-300 leading-relaxed">
+                  {quotaErrorMessage || 'Batas kuota transfer keluar (Egress) Supabase telah tercapai. Polling otomatis diistirahatkan agar tidak membebani kuota.'}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      api.resetQuotaState();
+                      refreshData(false, true);
+                    }}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <i className="bi bi-arrow-clockwise"></i> Coba Sinkronkan Lagi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('setting')}
+                    className="px-2.5 py-1 bg-white/60 dark:bg-slate-800/60 hover:bg-white dark:hover:bg-slate-800 border border-amber-300/60 dark:border-amber-700/60 text-amber-900 dark:text-amber-100 rounded-lg font-medium text-[11px] transition cursor-pointer"
+                  >
+                    Cek Konfigurasi Database
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* VIEW 1: HOME (BERANDA TUGAS) */}
         {activeTab === 'home' && (
@@ -2654,7 +2729,8 @@ export function SprinterApp() {
                   type="button"
                   onClick={() => {
                     if (window.confirm('Muat ulang data dari server?')) {
-                      refreshData(false);
+                      api.resetQuotaState();
+                      refreshData(false, true);
                     }
                   }}
                   className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 px-3 rounded-xl flex justify-center items-center gap-1.5 text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/80 transition"
@@ -2966,6 +3042,37 @@ export function SprinterApp() {
                       </div>
                     </form>
                   )}
+                </div>
+
+                {/* 1.5 STATUS BANDWIDTH & CACHE */}
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-sm">
+                      <i className="bi bi-hdd-network-fill text-teal-500"></i> Optimasi Bandwidth &amp; Cache
+                    </h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isQuotaExceeded
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    }`}>
+                      {isQuotaExceeded ? 'Limit Egress (402)' : 'Hemat Bandwidth Aktif'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
+                    Aplikasi menggunakan caching lokal dan polling adaptif untuk mencegah pemborosan kuota Egress Supabase. Jika Anda melakukan perubahan manual di Supabase Table Editor atau kuota baru di-reset, bersihkan cache lokal di sini.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      api.clearClientCache();
+                      api.resetQuotaState();
+                      refreshData(false, true);
+                      showToast('Cache dibersihkan & data disinkronkan!');
+                    }}
+                    className="w-full py-2.5 px-3 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+                  >
+                    <i className="bi bi-arrow-repeat"></i> Bersihkan Cache Lokal &amp; Sinkronkan Ulang
+                  </button>
                 </div>
 
                 {/* 2. SUPABASE AUTHENTICATION */}

@@ -12,7 +12,7 @@ export async function getOrCreateUser(uid: string, email: string, nama?: string)
         email,
         nama: userName,
         role: 'Sprinter',
-      }, { onConflict: 'uid' }).select().single();
+      }, { onConflict: 'uid' }).select('uid, email, nama, role').single();
 
       if (!error && data) return data;
       if (!error) return { uid, email, nama: userName, role: 'Sprinter' };
@@ -47,7 +47,7 @@ export async function getOrCreateUser(uid: string, email: string, nama?: string)
 export async function getUsers() {
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase.from('users').select('*');
+      const { data, error } = await supabase.from('users').select('uid, email, nama, role').limit(50);
       if (!error && data) return data;
     } catch {
       // ignore

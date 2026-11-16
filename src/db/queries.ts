@@ -7,11 +7,28 @@ export async function getAllData() {
   if (isSupabaseConfigured) {
     try {
       const [tasksRes, vendorsRes, categoriesRes, karyawanRes, recapsRes] = await Promise.all([
-        supabase.from('tasks').select('*').order('waktu_update', { ascending: false }),
-        supabase.from('vendors').select('*').order('nama', { ascending: true }),
-        supabase.from('categories').select('*').order('nama', { ascending: true }),
-        supabase.from('karyawan').select('*').order('nama', { ascending: true }),
-        supabase.from('recaps').select('*').order('tanggal', { ascending: false }),
+        supabase
+          .from('tasks')
+          .select('id, karyawan, judul_tugas, invoice, kategori, dari, tujuan, prioritas, pic, no_hp, biaya, keterangan_biaya, status, waktu_update, waktu_dibuat, waktu_selesai, penerima, catatan, foto_penerima')
+          .order('waktu_update', { ascending: false })
+          .limit(100),
+        supabase
+          .from('vendors')
+          .select('id, nama, no_hp, alamat, link_maps')
+          .order('nama', { ascending: true }),
+        supabase
+          .from('categories')
+          .select('id, nama')
+          .order('nama', { ascending: true }),
+        supabase
+          .from('karyawan')
+          .select('id, nama, posisi')
+          .order('nama', { ascending: true }),
+        supabase
+          .from('recaps')
+          .select('tanggal, karyawan, uang_cash')
+          .order('tanggal', { ascending: false })
+          .limit(31),
       ]);
 
       if (!tasksRes.error && tasksRes.data) {
@@ -67,11 +84,11 @@ export async function getAllData() {
 
   try {
     const [allTasks, allVendors, allCategories, allKaryawan, allRecaps] = await Promise.all([
-      db.select().from(tasks).orderBy(desc(tasks.waktuUpdate)),
+      db.select().from(tasks).orderBy(desc(tasks.waktuUpdate)).limit(100),
       db.select().from(vendors).orderBy(asc(vendors.nama)),
       db.select().from(categories).orderBy(asc(categories.nama)),
       db.select().from(karyawan).orderBy(asc(karyawan.nama)),
-      db.select().from(recaps).orderBy(desc(recaps.tanggal)),
+      db.select().from(recaps).orderBy(desc(recaps.tanggal)).limit(31),
     ]);
 
     return {
@@ -187,7 +204,7 @@ export async function upsertTask(taskData: {
         penerima: formatted.penerima,
         catatan: formatted.catatan,
         foto_penerima: formatted.fotoPenerima,
-      }).select().single();
+      }).select('id, waktu_update').single();
 
       if (!error && data) {
         return data;
@@ -262,7 +279,7 @@ export async function upsertVendor(vendorData: {
         no_hp: formatted.noHp,
         alamat: formatted.alamat,
         link_maps: formatted.linkMaps,
-      }).select().single();
+      }).select('id').single();
 
       if (!error && data) {
         return data;
@@ -317,7 +334,7 @@ export async function deleteVendor(id: string) {
 export async function insertCategory(nama: string) {
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase.from('categories').insert({ nama }).select().single();
+      const { data, error } = await supabase.from('categories').insert({ nama }).select('id, nama').single();
       if (!error && data) {
         return data;
       }
@@ -373,7 +390,7 @@ export async function upsertKaryawan(data: { ID: string; Nama: string; Posisi?: 
 
   if (isSupabaseConfigured) {
     try {
-      const { data: savedData, error } = await supabase.from('karyawan').upsert(formatted).select().single();
+      const { data: savedData, error } = await supabase.from('karyawan').upsert(formatted).select('id').single();
       if (!error && savedData) {
         return savedData;
       }
@@ -444,7 +461,7 @@ export async function upsertRecap(recapData: {
         tanggal: formatted.tanggal,
         karyawan: formatted.karyawan,
         uang_cash: formatted.uangCash,
-      }).select().single();
+      }).select('tanggal').single();
 
       if (!error && data) {
         return data;
@@ -478,7 +495,11 @@ export async function upsertRecap(recapData: {
 export async function getSprinterLocations() {
   if (isSupabaseConfigured) {
     try {
-      const res = await supabase.from('sprinter_locations').select('*').order('waktu_update', { ascending: false });
+      const res = await supabase
+        .from('sprinter_locations')
+        .select('id, karyawan_id, karyawan_nama, latitude, longitude, accuracy, speed, waktu_update, is_active')
+        .order('waktu_update', { ascending: false })
+        .limit(50);
       if (!res.error && res.data) {
         // Deduplicate by name taking the most recent update
         const locMap = new Map<string, any>();
