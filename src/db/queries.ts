@@ -82,6 +82,17 @@ export async function getAllData() {
     }
   }
 
+  if (!process.env.SQL_HOST) {
+    return {
+      tasks: [],
+      vendors: [],
+      categories: [],
+      users: [],
+      recaps: [],
+      sprinterLocations: [],
+    };
+  }
+
   try {
     const [allTasks, allVendors, allCategories, allKaryawan, allRecaps] = await Promise.all([
       db.select().from(tasks).orderBy(desc(tasks.waktuUpdate)).limit(100),
@@ -218,6 +229,10 @@ export async function upsertTask(taskData: {
     }
   }
 
+  if (!process.env.SQL_HOST) {
+    return formatted;
+  }
+
   try {
     const res = await db
       .insert(tasks)
@@ -246,6 +261,10 @@ export async function deleteTask(id: string) {
     } catch (e) {
       console.warn('Supabase deleteTask failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return [{ id }];
   }
 
   try {
@@ -293,6 +312,10 @@ export async function upsertVendor(vendorData: {
     }
   }
 
+  if (!process.env.SQL_HOST) {
+    return formatted;
+  }
+
   try {
     const res = await db
       .insert(vendors)
@@ -323,6 +346,10 @@ export async function deleteVendor(id: string) {
     }
   }
 
+  if (!process.env.SQL_HOST) {
+    return [{ id }];
+  }
+
   try {
     return await db.delete(vendors).where(eq(vendors.id, id)).returning();
   } catch (error) {
@@ -345,6 +372,10 @@ export async function insertCategory(nama: string) {
     } catch (e) {
       console.warn('Supabase insertCategory failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return { id: 0, nama };
   }
 
   try {
@@ -371,6 +402,10 @@ export async function deleteCategory(nama: string) {
     } catch (e) {
       console.warn('Supabase deleteCategory failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return [{ nama }];
   }
 
   try {
@@ -403,6 +438,10 @@ export async function upsertKaryawan(data: { ID: string; Nama: string; Posisi?: 
     }
   }
 
+  if (!process.env.SQL_HOST) {
+    return formatted;
+  }
+
   try {
     const res = await db
       .insert(karyawan)
@@ -433,6 +472,10 @@ export async function deleteKaryawan(id: string) {
     } catch (e) {
       console.warn('Supabase deleteKaryawan failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return [{ id }];
   }
 
   try {
@@ -473,6 +516,10 @@ export async function upsertRecap(recapData: {
     } catch (e) {
       console.warn('Supabase upsertRecap failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return formatted;
   }
 
   try {
@@ -524,6 +571,10 @@ export async function getSprinterLocations() {
     } catch (e) {
       console.warn('Supabase getSprinterLocations failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return [];
   }
 
   try {
@@ -599,6 +650,10 @@ export async function upsertSprinterLocation(locData: {
     } catch (e) {
       console.warn('Supabase upsertSprinterLocation failed:', e);
     }
+  }
+
+  if (!process.env.SQL_HOST) {
+    return formatted;
   }
 
   try {
